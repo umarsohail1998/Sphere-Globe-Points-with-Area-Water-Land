@@ -3,15 +3,12 @@
 The purpose of this Python module is to provide utility code for handling spherical Voronoi Diagrams.'''
 
 import scipy
-try:
-    if int(scipy.__version__.split('.')[1]) < 13:
-        raise ImportError('Module requires version of scipy module >= 0.13.0')
-except AttributeError: #handle this for sphinx build process on readthedocs because of module mocking
-    pass 
+
 
 import circumcircle
 import scipy.spatial
 import numpy
+from tqdm import tqdm
 import numpy.linalg
 import pandas
 import math
@@ -107,7 +104,7 @@ def generate_random_array_spherical_generators(num_generators,sphere_radius,prng
     #filter out any duplicate generators:
     df_random_points = pandas.DataFrame(cartesian_random_points)
     df_random_points_no_duplicates = df_random_points.drop_duplicates()
-    array_random_spherical_generators = df_random_points_no_duplicates.as_matrix()
+    array_random_spherical_generators = df_random_points_no_duplicates.to_numpy()
     return array_random_spherical_generators
 
 def filter_polygon_vertex_coordinates_for_extreme_proximity(array_ordered_Voronoi_polygon_vertices,sphere_radius):
@@ -252,9 +249,9 @@ def calculate_and_sum_up_inner_sphere_surface_angles_Voronoi_polygon(array_order
         #print 'Vincenty edge lengths a,b,c:', a,b,c
         pre_acos_term = (math.cos(b) - math.cos(a)*math.cos(c)) / (math.sin(a)*math.sin(c))
         if abs(pre_acos_term) > 1.0:
-            print 'angle calc vertex coords (giving acos violation):', [convert_cartesian_array_to_spherical_array(vertex) for vertex in [current_vertex,previous_vertex,next_vertex]]
-            print 'Vincenty edge lengths (giving acos violation) a,b,c:', a,b,c
-            print 'pre_acos_term:', pre_acos_term
+            print('angle calc vertex coords (giving acos violation):', [convert_cartesian_array_to_spherical_array(vertex) for vertex in [current_vertex,previous_vertex,next_vertex]])
+            print('Vincenty edge lengths (giving acos violation) a,b,c:', a,b,c)
+            print('pre_acos_term:', pre_acos_term)
             #break
         current_vertex_inner_angle_on_sphere_surface = math.acos(pre_acos_term)
 
@@ -469,12 +466,42 @@ class Voronoi_Sphere_Surface:
         array_tetrahedra = simplex_coords
         generator_index = 0
         generator_index_array = numpy.arange(self.original_point_array.shape[0])
-        filter_tuple = numpy.where((numpy.expand_dims(tri.simplices, -1) == generator_index_array).any(axis=1))
-        df = pandas.DataFrame({'generator_indices' : filter_tuple[1]}, index = filter_tuple[0])
-        gb = df.groupby('generator_indices')
-        dictionary_generators_and_triangle_indices_containing_those_generators = gb.groups
-        for generator in tri.points[:-1]:
+
+        # Umar Start
+        tri_exp = numpy.expand_dims(tri.simplices, -1)
+        dt = {}
+        count = 0
+        print("---> Data Conversion")
+        for i in tqdm(range(len(tri_exp))):
+            row = tri_exp[i]
+#         for row in tri_exp:
+            res = numpy.where(numpy.equal(numpy.array([row]),generator_index_array).any(axis=1)[0])
+            for x in res[0]:
+                if x not in dt:
+                    dt[x] = [count]
+                else:
+                    dt[x].append(count)
+            count += 1
+        dictionary_generators_and_triangle_indices_containing_those_generators= dt
+        # umar Closed
+        
+        
+#         filter_tuple = numpy.where(numpy.equal(numpy.expand_dims(tri.simplices, -1), generator_index_array).any(axis=1))
+#         print(filter_tuple)
+        
+#         df = pandas.DataFrame({'generator_indices' : filter_tuple[1]}, index = filter_tuple[0])
+#         gb = df.groupby('generator_indices')
+#         dictionary_generators_and_triangle_indices_containing_those_generators = gb.groups
+
+#         print(dictionary_generators_and_triangle_indices_containing_those_generators)
+
+        print("---> Processing Starting")
+        lt = tri.points[:-1]
+        for i in tqdm(range(len(lt))):
+#         for generator in tri.points[:-1]:
+            generator = lt[i]
             indices_of_triangles_surrounding_generator = dictionary_generators_and_triangle_indices_containing_those_generators[generator_index]
+#             print(indices_of_triangles_surrounding_generator)
             #pick any one of the triangles surrounding the generator and pick a non-generator vertex
             first_tetrahedron_index = indices_of_triangles_surrounding_generator[0]
             first_tetrahedron = array_tetrahedra[first_tetrahedron_index]
